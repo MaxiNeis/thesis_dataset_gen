@@ -1,7 +1,15 @@
+"""
+
+Utility code used to retrieve a result set of YouTube videos via YouTube's API given a query term.
+
+The result set - stored as DataFrame - does not contain the actual videos but the most important metadata about them.
+Which metadata is stored is defined by param 'videoData_template'.
+
+"""
+
 import googleapiclient.discovery
 import pandas as pd
 import jmespath
-from tabulate import tabulate
 
 api_service_name = "youtube"
 api_version = "v3"
@@ -12,19 +20,19 @@ youtube = googleapiclient.discovery.build(
 
 videolink_prefix = 'https://www.youtube.com/watch?v='
 
-metadata_template = {
-'Title': "snippet.title",
-'ID': "id.videoId",
-'Link' :  "id.videoId",               
-'Description': "snippet.description",
-'Published At': "snippet.publishedAt", 
-'Channel Title': "snippet.channelTitle",
-'Channel ID': "snippet.channelId",
+videoData_template = {
+'Title': 'snippet.title',
+'ID': 'id.videoId',
+'Link' :  'id.videoId',
+'Description': 'snippet.description',
+'Published At': 'snippet.publishedAt', 
+'Channel Title': 'snippet.channelTitle',
+'Channel ID': 'snippet.channelId',
 'QueryTerm': None,
 'Caption': None,
 }
 
-def searchVideo(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en'):
+def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en'):
     """
     Search for videos with the Youtube API
     If relatedVid is specified then query and channel cannot be defined
@@ -57,7 +65,7 @@ def searchVideo(query:str = None, relatedVid:str = None, maxRes:int = 1, channel
     # Save metadata of a video in a library
     for video in response['items']:
         videoData = {}
-        for field, jamespath in metadata_template.items():
+        for field, jamespath in videoData_template.items():
             if jamespath:
                 videoData[field] = jmespath.search(jamespath, video)
         # Data processing
