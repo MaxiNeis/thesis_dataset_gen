@@ -4,7 +4,7 @@ import argparse
 from configobj import ConfigObj
 from utils.videos import *
 from utils.subtitles import *
-import openai
+from utils.chatGPT import *
 
 def main():
     """
@@ -19,6 +19,7 @@ def main():
 
     query = config['Query'].get('query')
     maxRes = config['Query'].get('maxResults')
+    openAI_API_KEY = config['API'].get('chatGPT')
 
     bool_save_resultset = config['Library'].get('save_resultset_as_csv')
     bool_save_subtitles = config['Library'].get('save_subtitles')
@@ -55,30 +56,9 @@ def main():
     if bool_save_subtitles:
         save_processed_subtitles(full_video_subtitle_block, subtitles_savepath)
     
+    print(full_video_subtitle_block)
     
-    
-    # Feed ChatGPT
-    os.environ['OPENAI_API_KEY'] = "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"
-    openai.api_key = os.environ['OPENAI_API_KEY']
-
-
-    answer_example = """- Diamond push-up: I'm going to go over how to do a diamond
-"""
-
-    prepend_messages = [
-    {"role": "system", "content": "You are a program that returns bullet points containing relevant data from text."},
-    {"role": "user",
-        "content": f"Tell me all push-up variations that are explained in detail in the following text as bullet points:\n{full_video_subtitle_block}"},
-    {"role": "assistant", "content": answer_example}
-    ]
-    
-    completion = openai.ChatCompletion.create(
-    model="gpt-3.5-turbo",
-    messages=[prepend_messages + {"role": "user", "content": "Tell me all push-up variations that are explained in detail in the following text as bullet points:\n{full_video_subtitle_block}"}])
-
-
-    print(completion.choices[0].message.content)
-    save_chatgpt_answer(completion.choices[0].message.content, query_directory)
+    askChatGPT(full_video_subtitle_block, openAI_API_KEY)
 
 if __name__ == "__main__":
     main()
