@@ -46,19 +46,3 @@ def askChatGPT(text, openAI_API_KEY):
 
     print(all_answers)
 
-    # answer_example = """- Diamond push-up: I'm going to go over how to do a diamond"""
-
-    # prepend_messages = [
-    # {"role": "system", "content": "You are a program that returns bullet points containing relevant data from text."},
-    # {"role": "user",
-    #     "content": f"Tell me all push-up variations that are explained in detail in the following text as bullet points:\n{full_video_subtitle_block}"},
-    # {"role": "assistant", "content": answer_example}
-    # ]
-    
-    # completion = openai.ChatCompletion.create(
-    # model="gpt-3.5-turbo",
-    # messages=[prepend_messages + {"role": "user", "content": "Tell me all push-up variations that are explained in detail in the following text as bullet points:\n{full_video_subtitle_block}"}])
-
-
-    # print(completion.choices[0].message.content)
-    # save_chatgpt_answer(completion.choices[0].message.content, query_directory)
