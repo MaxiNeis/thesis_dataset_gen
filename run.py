@@ -58,7 +58,13 @@ def main():
     
     print(full_video_subtitle_block)
     
-    askChatGPT(full_video_subtitle_block, openAI_API_KEY)
+    talk_with(
+    persona="""You are a helpful cooking expert. You answer question by providing a short explanation and a list of easy to follow steps. You list ingredients, tools, and instructions.""",
+    tell_user=print,
+    ask_user=input
+    )
+    
+    talk_with(full_video_subtitle_block, openAI_API_KEY)
 
 if __name__ == "__main__":
     main()
