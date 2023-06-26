@@ -5,6 +5,7 @@ from configobj import ConfigObj
 from utils.videos import *
 from utils.subtitles import *
 from utils.chatGPT import *
+from personas import personas
 
 def main():
     """
@@ -59,26 +60,11 @@ def main():
     full_video_subtitle_block = " ".join(line for line in df_sbttls_raw["text"])
     if bool_save_subtitles:
         save_processed_subtitles(full_video_subtitle_block, subtitles_savepath)
+    print(df_searchRes['Link'])
         
     # Ask ChatGPT to identify exercises that are explained in detail
     # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
-    CGPT_message_history = []
-
-    CGPT_message_history = dialogue_step(
-    persona="""Return all fitness-exercises that are explained in detail in terms of proper execution in a given text. If no fitness-exercises are explained in detail, answer: none. Respond as a list containing the name of the exercise with the form of [Deadlift, Wide-Hands Pushup, Military Press]""",
-    #persona="""You are a helpful cooking expert. You answer question by providing a short explanation and a list of easy to follow steps. You list ingredients, tools, and instructions.""",
-    msg_history= CGPT_message_history,
-    user_query=f"""The given text is: {full_video_subtitle_block}.
-    What fitness-exercises in the given text are explained in detail? If no fitness-exercises are explained in detail, answer: none. Respond as a list containing one name per exercise, e.g. [Deadlift, Wide-Hands Pushup, Military Press, Diamond Pushup]"""
-    )
-
-    # And why it thinks it is explained deeply
-    CGPT_message_history = dialogue_step(
-    persona="""Return all fitness-exercises that are explained in detail in terms of proper execution in a given text. Respond as a python dictionary with the following structure: {key: value}, where the key is name name of the exercise and the value is a list of the citations you found""",
-    #persona="""You are a helpful cooking expert. You answer question by providing a short explanation and a list of easy to follow steps. You list ingredients, tools, and instructions.""",
-    msg_history= CGPT_message_history,
-    user_query="""For each fitness-exercise you found earlier, cite the respective passages of the given text that explain only it's proper execution in detail. Group the citations of an exercise as a list, e.g. ["To perform the deadlift you have to adopt a firm stance", "Place your hands about shoulder-wide on the barbell."] and return it alltogether as a python dictionary, meaning the key is the name of the exercise and the value is the respective list."""
-    )
+    personas['ThreeStep-Trainer-Persona'](full_video_subtitle_block)
     
     # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
     # for elem in CGPT_message_history:
