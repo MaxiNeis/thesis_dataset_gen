@@ -4,7 +4,7 @@ import argparse
 from configobj import ConfigObj
 from utils.videos import *
 from utils.subtitles import *
-from utils.chatGPT import *
+from personas.chatGPT import *
 from personas import personas
 
 def main():
@@ -57,14 +57,14 @@ def main():
         save_raw_subtitles(df_sbttls_raw, subtitles_savepath)
 
     # Process subtitles to get the full text block (subtitles are returned per video segment together with start-time and duration)
-    full_video_subtitle_block = " ".join(line for line in df_sbttls_raw["text"])
+    subtitles = " ".join(line for line in df_sbttls_raw["text"])
     if bool_save_subtitles:
-        save_processed_subtitles(full_video_subtitle_block, subtitles_savepath)
+        save_processed_subtitles(subtitles, subtitles_savepath)
     print(df_searchRes['Link'])
         
     # Ask ChatGPT to identify exercises that are explained in detail
     # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
-    personas['ThreeStep-Trainer-Persona'](full_video_subtitle_block)
+    gpt = personas['ThreeStep-Trainer-Persona'](subtitles)
     
     # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
     # for elem in CGPT_message_history:

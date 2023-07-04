@@ -1,6 +1,6 @@
-from utils.chatGPT import *
+from personas.chatGPT import *
 
-class TwoStep_TrainerPersona:
+class TwoStep_TrainerPersona(chatGPT):
   """
   - Too imprecise.
   - Example result: "Dip": [
@@ -10,9 +10,8 @@ class TwoStep_TrainerPersona:
         => Increase preciseness of exercise selection in first step
   """
   def __init__(self, text):
-    CGPT_message_history = []
-
-    CGPT_message_history = dialogue_step(
+    
+    CGPT_message_history = self.dialogue_step(
     persona="""You are a fitness Trainer. Read a given text and return all fitness-exercises that are explained in detail in terms of proper execution. If no fitness-exercises are explained in detail, answer: none. Respond as a list containing the name of the exercise with the form of [Deadlift, Wide-Hands Pushup, Military Press]""",
     #persona="""You are a helpful cooking expert. You answer question by providing a short explanation and a list of easy to follow steps. You list ingredients, tools, and instructions.""",
     msg_history= CGPT_message_history,
@@ -21,7 +20,7 @@ class TwoStep_TrainerPersona:
     )
 
     # And why it thinks it is explained deeply
-    CGPT_message_history = dialogue_step(
+    CGPT_message_history = self.dialogue_step(
     persona="""You are a fitness Trainer. Read a given text and return all fitness-exercises that are explained in detail in terms of proper execution.""",
     #persona="""You are a helpful cooking expert. You answer question by providing a short explanation and a list of easy to follow steps. You list ingredients, tools, and instructions.""",
     msg_history= CGPT_message_history,

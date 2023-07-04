@@ -1,4 +1,4 @@
-from utils.chatGPT import *
+from personas.chatGPT import *
 
 class TwoStep_IEPersona:
   """
