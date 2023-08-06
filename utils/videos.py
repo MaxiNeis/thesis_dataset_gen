@@ -77,13 +77,10 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
     video_df = pd.DataFrame(videoList)
     return video_df
 
+
 def download_videos(video_dir_savepath: str, video_ID: str, video_title: str):
-    
-
-    
     yt = YouTube(f"https://www.youtube.com/watch?v={video_ID}").streams.filter(res="720p").first().download(video_dir_savepath)
-    #yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution')[-1].download()
-    
 
-    #yt = yt.get('mp4', '720p')
-    #yt.download(video_dir_savepath)
+def get_length(video_url: str):
+    yt = YouTube(video_url)
+    return yt.length

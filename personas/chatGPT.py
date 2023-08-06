@@ -15,7 +15,6 @@ class chatGPT(object):
         
         
     def dialogue_step(self, persona, user_query):
-        
         if user_query == "":
             return self.message_history
 
@@ -29,6 +28,7 @@ class chatGPT(object):
         gpt_message = result["choices"][0]["message"]
         self.message_history.append({"role": gpt_message["role"], "content": gpt_message["content"]})
         print("GPT: " + gpt_message["content"])
+        
 
     def getResult(self):
         return self.message_history[-1]["content"]

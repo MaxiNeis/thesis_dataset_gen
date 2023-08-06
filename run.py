@@ -35,7 +35,6 @@ def main():
     q_ass_sample_size = config['Query_Assessment']['sample_size']
 
 
-
     # One directory per config.ini / its query where everything is saved
     query_directory = Path(data_dir, title)
     videos_libr_savepath = Path(query_directory, ".".join([title, file_ext]))
@@ -55,6 +54,12 @@ def main():
     
     # Get video resultset
     df_searchRes = searchVideos(query=query, maxRes=maxRes)
+    # Enhance it with video_length, since this can't be done right away with Youtube's API call
+    lengths = []
+    for link in df_searchRes['Link']:
+        lengths.append(get_length(link))
+    df_searchRes.insert()
+    df_searchRes['Length'] = lengths
     if save_resultset:
         df_searchRes.to_csv(videos_libr_savepath, index=False)
         # Save link separately as .txt for easier manual access
@@ -64,7 +69,9 @@ def main():
         print(f'Resultset saved in: {videos_libr_savepath}')
         print(df_searchRes)
 
-
+    if query_assessment:
+        # Initialize Monte Carlo Sim result table
+        mc_analysis = pd.DataFrame(columns=['ID','Title','Length','MC runs','# None','# Wrong Format','Rate "Found Exercise" [%]', 'Rate "Python Dict Returned" [%]'])
 
     # Main routine
     for video_ID, video_title in zip(df_searchRes['ID'], df_searchRes['Title']):
@@ -77,6 +84,11 @@ def main():
         # Download each video if desired
         if save_videos == True:
             download_videos(videos_dir_savepath, video_ID, video_title)
+        
+        # Add video to MC table if desired
+        if query_assessment:
+            if video_ID not in mc_analysis['ID']:
+                mc_analysis.append({'ID': video_ID, 'Title': video_title}, ignore_index=True)
 
         # Process subtitles to get text-only (subtitles are returned per video segment / together with start-time and duration)
         subtitles = " ".join(line for line in df_sbttls_raw["text"])
@@ -90,10 +102,15 @@ def main():
         if query_assessment:
             runs = int(q_ass_sample_size)
             
-        # Ask ChatGPT to identify exercises that are explained in detail
-        # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
         for x in range(runs):
+            # Ask ChatGPT to identify exercises that are explained in detail
+            # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
             gpt = personas['ThreeStep-Trainer-Persona'](subtitles)
+            
+            if query_assessment:
+                mc_analysis 
+            print(mc_analysis)
+
         
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
         print("Return Ergebnis: " + gpt.getResult())
