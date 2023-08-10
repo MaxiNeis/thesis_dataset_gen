@@ -10,7 +10,8 @@ Which metadata is stored is defined by param 'videoData_template'.
 import googleapiclient.discovery
 import pandas as pd
 import jmespath
-from pytube import YouTube  
+from pytube import YouTube
+from datetime import timedelta
 
 api_service_name = "youtube"
 api_version = "v3"
@@ -83,4 +84,4 @@ def download_videos(video_dir_savepath: str, video_ID: str, video_title: str):
 
 def get_length(video_url: str):
     yt = YouTube(video_url)
-    return yt.length
+    return timedelta(seconds=yt.length)

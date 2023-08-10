@@ -1,4 +1,5 @@
 import openai
+import json
 
 class chatGPT(object):
     
@@ -7,9 +8,11 @@ class chatGPT(object):
         for dialogue_step in self.instructions:
             self.dialogue_step(self.instructions[dialogue_step]['persona'], self.instructions[dialogue_step]['user_query'])
         # Output as dictionary to have structured data-format
+        del self.message_history[0]
         self.instructions[dialogue_step]['user_query'] = """Now return your findings as a python dictionary where each identified exercise represents a key and the corresponding citations represent its value"""
         self.dialogue_step(self.instructions[dialogue_step]['persona'], self.instructions[dialogue_step]['user_query'])
         # Remove 'What not to do'
+        del self.message_history[0]
         self.instructions[dialogue_step]['user_query'] = """Finally, out of all instructions you cited earlier, remove every sentence that describes what NOT to do and return the updated dictionary"""
         self.dialogue_step(self.instructions[dialogue_step]['persona'], self.instructions[dialogue_step]['user_query'])
         
@@ -31,4 +34,8 @@ class chatGPT(object):
         
 
     def getResult(self):
-        return self.message_history[-1]["content"]
+        try:
+            rtn = json.loads(self.message_history[-1]["content"])
+        except:
+            rtn = 'no dictionary found'
+        return rtn
