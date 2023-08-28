@@ -12,6 +12,8 @@ import pandas as pd
 import jmespath
 from pytube import YouTube
 from datetime import timedelta
+from utils.subtitles import *
+import requests
 
 api_service_name = "youtube"
 api_version = "v3"
@@ -25,7 +27,9 @@ videolink_prefix = 'https://www.youtube.com/watch?v='
 videoData_template = {
 'Title': 'snippet.title',
 'ID': 'id.videoId',
-'Link' :  'id.videoId',
+'Length': None,
+'Link' :  None,
+'isShort': None,
 'Description': 'snippet.description',
 'Published At': 'snippet.publishedAt', 
 'Channel Title': 'snippet.channelTitle',
@@ -34,7 +38,7 @@ videoData_template = {
 'Caption': None,
 }
 
-def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en'):
+def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'none', lang:str = 'en'):
     """
     Search for videos with the Youtube API
     If relatedVid is specified then query and channel cannot be defined
@@ -49,6 +53,9 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
         video_df: Pandas DataFrame of metadata of the generated videos. 
             Metadata columns are: title, videoId, videoLink, description, publishedAt,
             channelTitle, channelId, queryTerm, caption.
+    Note:
+        Caption parameter is a serious API functionality limitation for this project.
+        This is because you cannot
     """
     request = youtube.search().list(
     part = "id,snippet",
@@ -71,7 +78,9 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
             if jamespath:
                 videoData[field] = jmespath.search(jamespath, video)
         # Data processing
-        videoData['Link'] = 'https://www.youtube.com/watch?v=' + videoData['Link']
+        videoData['Length'] = get_length(videolink_prefix + videoData['ID'])
+        videoData['Link'] = videolink_prefix + videoData['ID']
+        videoData['isShort'] = is_short(videoData['ID'])
         videoData['Query Term'] = query
         videoData['Caption'] = caption
         videoList.append(videoData)
@@ -85,3 +94,56 @@ def download_videos(video_dir_savepath: str, video_ID: str, video_title: str):
 def get_length(video_url: str):
     yt = YouTube(video_url)
     return timedelta(seconds=yt.length)
+
+def is_short(vid: str) -> bool:
+    """
+    Parameters:
+        vid: The video ID
+    Returns: True if the video is a short, False otherwise
+    """
+    url = 'https://www.youtube.com/shorts/' + vid
+    ret = requests.head(url)
+    # whether 303 or other values, it's not short
+    return ret.status_code == 200
+
+def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', badResults = [], balancing:str = None):
+    """
+    Get more videos than originally requested to account for videos without subtitles or with wrong format
+    """
+    # Initiate amount of needed videos with maxRes
+    fillersNeeded = maxRes
+    results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
+    # process resultset, i.e. remove videos without subtitles and wrong format
+    for videoID in results['ID']:
+        if not fetch_subtitles(videoID):
+            badResults.append(videoID)
+    badResults2 = check_for_wrong_format(results, balancing)
+    if badResults2:
+        # Start removing from behind
+        badResults2 = badResults2.reverse()
+    badResults.append()
+
+
+    while len(results) < maxRes:
+        results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
+
+def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
+    """
+    Returns: a list of unfitting videos by videoID (to meet the requested balancing) or None if the balanacing requirement is met
+    """
+    if not balancing or balancing == 'none':
+        return None
+    elif balancing == 'balanced':
+        results['isShort'] = results['ID']
+    elif balancing == 'shorts_only':
+        if False in results['isShort']:
+            return list(results['ID'][results['isShort'] == False])
+        else:
+            return None
+    elif balancing == 'normal_only':
+        if True in results['isShort']:
+            return list(results['ID'][results['isShort'] == True])
+        else:
+            return None
+    else:
+        raise ValueError(f'Balancing {balancing} not implemented. Please specify a described balancing method from config.ini')

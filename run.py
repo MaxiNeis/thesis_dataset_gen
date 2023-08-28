@@ -22,6 +22,7 @@ def main():
 
     query = config['Query']['query']
     maxRes = config['Query']['maxResults']
+    balancing = config['Query']['balancing']
 
     openai.api_key = config['chatGPT']['API']
 
@@ -56,12 +57,11 @@ def main():
                 os.makedirs(videos_dir_savepath)
     
     # Get video resultset
-    df_searchRes = searchVideos(query=query, maxRes=maxRes)
-    # Enhance it with video_length, since this can't be done right away with Youtube's API call
-    lengths = []
-    for link in df_searchRes['Link']:
-        lengths.append(get_length(link))
-    df_searchRes.insert(loc=2, column='Length', value=lengths)
+    df_searchRes = createVideoDF(query=query, maxRes=maxRes, balancing=balancing)
+    # # Make sure videos have subtitles, otherwise replace them with new ones 
+    # for video in df_searchRes['Link']:
+    #     check_for_subtitles(video)
+    
     if save_resultset:
         df_searchRes.to_csv(videos_libr_savepath, index=False)
         # Save link separately as .txt for easier manual access
