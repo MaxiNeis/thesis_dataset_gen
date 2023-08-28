@@ -13,7 +13,10 @@ def fetch_subtitles(video_ID: str):
     """
     Get raw subtitles for each video of a result set
     """
-    transcript_list = YouTubeTranscriptApi.get_transcript(video_ID)
+    try:
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_ID)
+    except:
+        return False
     df_raw = pd.DataFrame.from_records(transcript_list)
     return df_raw
 

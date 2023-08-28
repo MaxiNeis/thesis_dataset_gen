@@ -1,5 +1,6 @@
 import openai
 import json
+import urllib.error as urllib2
 
 class chatGPT(object):
     
@@ -17,17 +18,25 @@ class chatGPT(object):
         self.dialogue_step(self.instructions[dialogue_step]['persona'], self.instructions[dialogue_step]['user_query'])
         
         
-    def dialogue_step(self, persona, user_query):
+    def dialogue_step(self, persona, user_query, try_count=5):
         if user_query == "":
             return self.message_history
 
         self.message_history.append({"role": "user", "content": user_query})
         query = [{"role": "system", "content": persona}]
         query.extend(self.message_history)
-        result = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=query
-        )
+        try:
+            result = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=query
+            )
+        except urllib2.HTTPError as err:
+            if str(err.code)[:2] == 50: # 500 error family, didn't find a better way to check for 500 errors
+                if try_count > 0:
+                    return self.dialogue_step(self=self, persona=persona, user_query=user_query, try_count=try_count-1)
+                else:
+                    raise err
+
         gpt_message = result["choices"][0]["message"]
         self.message_history.append({"role": gpt_message["role"], "content": gpt_message["content"]})
         print("GPT: " + gpt_message["content"])
