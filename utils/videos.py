@@ -14,6 +14,7 @@ from pytube import YouTube
 from datetime import timedelta
 from utils.subtitles import *
 import requests
+import googleapiclient.youtubeAnalytics
 
 api_service_name = "youtube"
 api_version = "v3"
@@ -87,7 +88,6 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
     video_df = pd.DataFrame(videoList)
     return video_df
 
-
 def download_videos(video_dir_savepath: str, video_ID: str, video_title: str):
     yt = YouTube(f"https://www.youtube.com/watch?v={video_ID}").streams.filter(res="720p").first().download(video_dir_savepath)
 
@@ -101,31 +101,43 @@ def is_short(vid: str) -> bool:
         vid: The video ID
     Returns: True if the video is a short, False otherwise
     """
+    test = youtubeAnalytics.reports.query()
     url = 'https://www.youtube.com/shorts/' + vid
     ret = requests.head(url)
     # whether 303 or other values, it's not short
     return ret.status_code == 200
 
-def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', badResults = [], balancing:str = None):
+def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', balancing:str = None, maxResOriginal:int = None, run = 1):
     """
     Get more videos than originally requested to account for videos without subtitles or with wrong format
     """
-    # Initiate amount of needed videos with maxRes
-    fillersNeeded = maxRes
+    if run == 1:
+        maxResOriginal = maxRes
+    run +=1
     results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
-    # process resultset, i.e. remove videos without subtitles and wrong format
+    # process resultset, i.e. remove videos that don't fit (= without subtitles and/or wrong format)
+    badResults = []
     for videoID in results['ID']:
-        if not fetch_subtitles(videoID):
+        if fetch_subtitles(videoID) is None:
             badResults.append(videoID)
-    badResults2 = check_for_wrong_format(results, balancing)
-    if badResults2:
-        # Start removing from behind
-        badResults2 = badResults2.reverse()
-    badResults.append()
+    moreBadResults = check_for_wrong_format(results, balancing)
+    if moreBadResults:
+        remove = list(set(badResults) | set(moreBadResults))
+    else: remove = badResults
+    results = results[~results['ID'].isin(remove)]
 
-
-    while len(results) < maxRes:
-        results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
+    if len(results) < maxResOriginal:
+        maxRes += len(remove)
+        results = createVideoDF(query = query,
+                                relatedVid = relatedVid, 
+                                maxRes = maxRes, 
+                                channelId = channelId, 
+                                caption = caption, 
+                                lang = lang, 
+                                balancing = balancing, 
+                                maxResOriginal = maxResOriginal, 
+                                run = run)
+    return results
 
 def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
     """
@@ -134,9 +146,9 @@ def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
     if not balancing or balancing == 'none':
         return None
     elif balancing == 'balanced':
-        results['isShort'] = results['ID']
+        pass
     elif balancing == 'shorts_only':
-        if False in results['isShort']:
+        if False in results['isShort'].values:
             return list(results['ID'][results['isShort'] == False])
         else:
             return None

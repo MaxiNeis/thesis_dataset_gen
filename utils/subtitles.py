@@ -16,7 +16,7 @@ def fetch_subtitles(video_ID: str):
     try:
         transcript_list = YouTubeTranscriptApi.get_transcript(video_ID)
     except:
-        return False
+        return None
     df_raw = pd.DataFrame.from_records(transcript_list)
     return df_raw
 

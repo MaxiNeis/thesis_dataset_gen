@@ -15,13 +15,14 @@ def main():
     """
     # Initializion
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config-file', default='./config.ini', help='specify config file', metavar='FILE')
+    userDir = os.path.expanduser('~')
+    parser.add_argument('-c', '--config-file', default=str(Path(userDir,'Dropbox\Thesis\Repo','config.ini')), help='specify config file', metavar='FILE')
     args = parser.parse_args()
 
     config = ConfigObj(args.config_file)
 
     query = config['Query']['query']
-    maxRes = config['Query']['maxResults']
+    maxRes = int(config['Query']['maxResults'])
     balancing = config['Query']['balancing']
 
     openai.api_key = config['chatGPT']['API']
@@ -97,6 +98,10 @@ def main():
 
         # Process subtitles to get text-only (subtitles are returned per video segment / together with start-time and duration)
         subtitles = " ".join(line for line in df_sbttls_raw["text"])
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            nltk.download('punkt')
         if len(nltk.word_tokenize(subtitles)) > 4000:
             print("Warning: Subtitles are longer than 4000 tokens. This might cause problems with the GPT-3 API. Cutting off at 4000 tokens.")
             subtitles = " ".join(nltk.word_tokenize(subtitles)[:3800])
