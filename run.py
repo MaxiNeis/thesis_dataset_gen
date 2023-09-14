@@ -61,9 +61,6 @@ def main():
     # Get video resultset
     if not runFromCSV:
         df_searchRes = createVideoDF(query=query, maxRes=maxRes, balancing=balancing)
-        # # Make sure videos have subtitles, otherwise replace them with new ones 
-        # for video in df_searchRes['Link']:
-        #     check_for_subtitles(video)
     else:
         df_searchRes = pd.read_csv(videos_libr_savepath)
     
