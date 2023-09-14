@@ -32,6 +32,7 @@ def main():
     data_dir = config['Library']['data_dir']
     title = config['Library']['title']
     file_ext = config['Library']['file_ext']
+    runFromCSV = config['Library'].as_bool('run_fromm_csv')
 
     save_videos = config['Video'].as_bool('save_videos')
 
@@ -58,13 +59,16 @@ def main():
                 os.makedirs(videos_dir_savepath)
     
     # Get video resultset
-    df_searchRes = createVideoDF(query=query, maxRes=maxRes, balancing=balancing)
-    # # Make sure videos have subtitles, otherwise replace them with new ones 
-    # for video in df_searchRes['Link']:
-    #     check_for_subtitles(video)
+    if not runFromCSV:
+        df_searchRes = createVideoDF(query=query, maxRes=maxRes, balancing=balancing)
+        # # Make sure videos have subtitles, otherwise replace them with new ones 
+        # for video in df_searchRes['Link']:
+        #     check_for_subtitles(video)
+    else:
+        df_searchRes = pd.read_csv(videos_libr_savepath)
     
     if save_resultset:
-        df_searchRes.to_csv(videos_libr_savepath, index=False)
+        df_searchRes.to_csv(videos_libr_savepath,  index=False)
         # Save link separately as .txt for easier manual access
         link = df_searchRes['Link']
         with open(Path(query_directory, 'links.txt'), 'w') as f:

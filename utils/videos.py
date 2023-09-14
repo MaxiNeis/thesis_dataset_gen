@@ -13,8 +13,7 @@ import jmespath
 from pytube import YouTube
 from datetime import timedelta
 from utils.subtitles import *
-import requests
-import googleapiclient.youtubeAnalytics
+import concurrent.futures
 
 api_service_name = "youtube"
 api_version = "v3"
@@ -32,7 +31,7 @@ videoData_template = {
 'Link' :  None,
 'isShort': None,
 'Description': 'snippet.description',
-'Published At': 'snippet.publishedAt', 
+'Published At': 'snippet.publishedAt',
 'Channel Title': 'snippet.channelTitle',
 'Channel ID': 'snippet.channelId',
 'QueryTerm': None,
@@ -81,7 +80,9 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
         # Data processing
         videoData['Length'] = get_length(videolink_prefix + videoData['ID'])
         videoData['Link'] = videolink_prefix + videoData['ID']
-        videoData['isShort'] = is_short(videoData['ID'])
+        # Unfortunately, getting the information of wether a video is a short or not is not a trivial task and too much for this project.
+        # Therefore as a workaround we simply decide by taking the video length into account whether a video is a short or not, building on the premise that the effect for the thesis stays the same (compressed visual information).
+        videoData['isShort'] = True if videoData['Length'] < timedelta(minutes=1) else False
         videoData['Query Term'] = query
         videoData['Caption'] = caption
         videoList.append(videoData)
@@ -95,18 +96,6 @@ def get_length(video_url: str):
     yt = YouTube(video_url)
     return timedelta(seconds=yt.length)
 
-def is_short(vid: str) -> bool:
-    """
-    Parameters:
-        vid: The video ID
-    Returns: True if the video is a short, False otherwise
-    """
-    test = youtubeAnalytics.reports.query()
-    url = 'https://www.youtube.com/shorts/' + vid
-    ret = requests.head(url)
-    # whether 303 or other values, it's not short
-    return ret.status_code == 200
-
 def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', balancing:str = None, maxResOriginal:int = None, run = 1):
     """
     Get more videos than originally requested to account for videos without subtitles or with wrong format
@@ -117,9 +106,12 @@ def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, chann
     results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
     # process resultset, i.e. remove videos that don't fit (= without subtitles and/or wrong format)
     badResults = []
-    for videoID in results['ID']:
-        if fetch_subtitles(videoID) is None:
-            badResults.append(videoID)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futurelist = {executor.submit(fetch_subtitles, videoID): videoID for videoID in results['ID']}
+        for future in concurrent.futures.as_completed(futurelist):
+            videoID = futurelist[future]
+            if future.result() is None:
+                badResults.append(videoID)
     moreBadResults = check_for_wrong_format(results, balancing)
     if moreBadResults:
         remove = list(set(badResults) | set(moreBadResults))
@@ -137,7 +129,7 @@ def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, chann
                                 balancing = balancing, 
                                 maxResOriginal = maxResOriginal, 
                                 run = run)
-    return results
+    return results.head(maxResOriginal)
 
 def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
     """
