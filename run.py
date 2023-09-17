@@ -8,6 +8,9 @@ from utils.general import *
 from personas.chatGPT import *
 from personas import personas
 import nltk
+import concurrent.futures
+
+
 
 def main():
     """
@@ -83,6 +86,8 @@ def main():
         # For convenience while programming
         print('https://www.youtube.com/watch?v=' + video_ID)
 
+        video_title = slugify(os.path.splitext(video_title)[0])
+
         # Get each video's raw subtitles from API
         df_sbttls_raw = fetch_subtitles(video_ID)
         if save_subtitles:
@@ -113,32 +118,16 @@ def main():
         if query_assessment:
             runs = int(q_ass_sample_size)
             
-        for x in range(runs):
-            # Ask ChatGPT to identify exercises that are explained in detail
-            # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
-            gpt = personas['ThreeStep-Trainer-Persona'](subtitles)
-            print(mc_analysis)
-            
-            if query_assessment:
-                mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']] = mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']] + 1
-                # Check that result != None
-                if gpt.getResult() == 'None':
-                    mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
-                if not gpt.getResult():
-                    mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
-                else:
-                    try:
-                        # Another case of result != None
-                        if 'None' in gpt.getResult().keys():
-                            mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
-                        # Invalid citations / no exercise found / the same 'exercise description' citations returned for every exercise
-                        else:
-                            if not is_valid_citation(gpt.getResult()):
-                                mc_analysis.loc[mc_analysis.ID==video_ID, ['# Invalid Citations']] = mc_analysis.loc[mc_analysis.ID==video_ID, ['# Invalid Citations']] + 1
-                    # Wrong format / no dict returned
-                    except AttributeError:
-                        mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] + 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            futurelist = {executor.submit(askGPT, subtitles, query_assessment, mc_analysis, video_ID): i for i in range(runs)}
+            for future in concurrent.futures.as_completed(futurelist):
+                cnt = futurelist[future]
+                try:
+                    data = future.result()
+                except:
+                    print(f"Try no. {cnt} with video {video_ID} failed.")
 
+        #print(mc_analysis)
         # Calculate rates
         if query_assessment:
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Exercise Found" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# None']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
@@ -152,6 +141,31 @@ def main():
         
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
 
+def askGPT(subtitles, query_assessment, mc_analysis, video_ID):
+    # Ask ChatGPT to identify exercises that are explained in detail
+    # Reference / Inspiration: https://arxiv.org/pdf/2304.11633.pdf & https://arxiv.org/pdf/2302.10205.pdf
+    gpt = personas['ThreeStep-Trainer-Persona'](subtitles)
+    
+    if query_assessment:
+        mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']] = mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']] + 1
+        # Check that result != None
+        if gpt.getResult() == 'None':
+            mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
+        if not gpt.getResult():
+            mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
+        else:
+            try:
+                # Another case of result != None
+                if 'None' in gpt.getResult().keys():
+                    mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# None']] + 1
+                # Invalid citations / no exercise found / the same 'exercise description' citations returned for every exercise
+                else:
+                    if not is_valid_citation(gpt.getResult()):
+                        mc_analysis.loc[mc_analysis.ID==video_ID, ['# Invalid Citations']] = mc_analysis.loc[mc_analysis.ID==video_ID, ['# Invalid Citations']] + 1
+            # Wrong format / no dict returned
+            except AttributeError:
+                mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] + 1
+    return gpt
 
 if __name__ == "__main__":
     main()

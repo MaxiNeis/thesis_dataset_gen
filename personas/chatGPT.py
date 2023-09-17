@@ -28,7 +28,8 @@ class chatGPT(object):
         try:
             result = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
-                messages=query
+                messages=query,
+                temperature=0
             )
         except urllib2.HTTPError as err:
             if str(err.code)[:2] == 50: # 500 error family, didn't find a better way to check for 500 errors

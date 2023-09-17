@@ -7,6 +7,9 @@ Utility code used to do all kinds of data-pipelining and -manipulation with the 
 import pandas as pd
 from youtube_transcript_api import YouTubeTranscriptApi
 from pathlib import Path
+import os
+from slugify import slugify
+
 
 
 def fetch_subtitles(video_ID: str):
@@ -24,7 +27,8 @@ def save_raw_subtitles(raw_subtitles: pd.DataFrame, video_ID: str, video_title: 
     """
     Save raw subtitles
     """
-    filename = f"{video_title}_{video_ID}_raw.csv"
+    clean_video_title = slugify(os.path.splitext(video_title)[0])
+    filename = f"{clean_video_title}_{video_ID}_raw.csv"
     raw_subtitles.to_csv(Path(subtitles_path,filename), index=False)
     print(f'Raw subtitles saved in: {Path(subtitles_path,filename)}')
     
@@ -32,7 +36,8 @@ def save_processed_subtitles(processed_subtitles: str, video_ID: str, video_titl
     """
     Save processed subtitles
     """
-    filename = f"{video_title}_{video_ID}_processed.csv"
+    clean_video_title = slugify(os.path.splitext(video_title)[0])
+    filename = f"{clean_video_title}_{video_ID}_processed.csv"
     with open(Path(subtitles_path, filename), "w") as file:
         file.write(processed_subtitles)
     print(f'Processed subtitles saved in: {Path(subtitles_path,filename)}')
