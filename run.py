@@ -11,7 +11,6 @@ import nltk
 import concurrent.futures
 
 
-
 def main():
     """
     Main Function
@@ -20,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser()
     userDir = os.path.expanduser('~')
     parser.add_argument('-c', '--config-file', default=str(Path(userDir,'Dropbox\Thesis\Repo','config.ini')), help='specify config file', metavar='FILE')
+    parser.add_argument('-v', '--video', default='', help='specify a video ID that you want to examine')
     args = parser.parse_args()
 
     config = ConfigObj(args.config_file)
@@ -35,7 +35,7 @@ def main():
     data_dir = config['Library']['data_dir']
     title = config['Library']['title']
     file_ext = config['Library']['file_ext']
-    runFromCSV = config['Library'].as_bool('run_fromm_csv')
+    runFromCSV = config['Library'].as_bool('run_from_csv')
 
     save_videos = config['Video'].as_bool('save_videos')
 
@@ -75,6 +75,11 @@ def main():
             f.write(link.to_string(index=False))
         print(f'Resultset saved in: {videos_libr_savepath}')
         print(df_searchRes)
+    
+    if args.video:
+        df_searchRes = df_searchRes[df_searchRes['ID'] == args.video]
+        print(f'Only examining video with ID {args.video}')
+        print(df_searchRes)
 
     if query_assessment:
         # Initialize Monte Carlo Sim result table
@@ -108,9 +113,12 @@ def main():
             nltk.data.find('tokenizers/punkt')
         except LookupError:
             nltk.download('punkt')
-        if len(nltk.word_tokenize(subtitles)) > 4000:
-            print("Warning: Subtitles are longer than 4000 tokens. This might cause problems with the GPT-3 API. Cutting off at 4000 tokens.")
-            subtitles = " ".join(nltk.word_tokenize(subtitles)[:3800])
+        print(len(nltk.word_tokenize(subtitles)))
+        if len(nltk.word_tokenize(subtitles)) > 3750:
+            print("Warning: Subtitles are longer than 3750 tokens. This might cause problems with the GPT-3 API as additional tokens are needed for the query and 4097 tokens is the limit. Cutting off at 3750 tokens.")
+            print(nltk.word_tokenize(subtitles)[:3750])
+            subtitles = " ".join(elem for elem in nltk.word_tokenize(subtitles)[:3750])
+            print(len(subtitles))
         if save_subtitles:
             save_processed_subtitles(subtitles, video_ID, video_title, subtitles_savepath)
 
@@ -124,8 +132,9 @@ def main():
                 cnt = futurelist[future]
                 try:
                     data = future.result()
-                except:
+                except Exception as e:
                     print(f"Try no. {cnt} with video {video_ID} failed.")
+                    print(e)
 
         #print(mc_analysis)
         # Calculate rates

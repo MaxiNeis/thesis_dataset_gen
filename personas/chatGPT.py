@@ -45,7 +45,7 @@ class chatGPT(object):
 
     def getResult(self):
         try:
-            rtn = json.loads(self.message_history[-1]["content"])
+            rtn = json.loads(self.message_history[-1]["content"].strip('"').strip("'").strip("python").strip("Python"))
         except:
             rtn = 'no dictionary found'
         return rtn
