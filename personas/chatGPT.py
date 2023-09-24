@@ -49,3 +49,7 @@ class chatGPT(object):
         except:
             rtn = 'no dictionary found'
         return rtn
+    
+    def saveResult(self, videoID, chatGPT_results_directory):
+        with open(f"/chatGPT_results_directory/{videoID}.json", "w") as outfile:
+            json.dump(self.message_history, outfile, indent=4)

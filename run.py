@@ -47,6 +47,7 @@ def main():
     # One directory per config.ini / its query where everything is saved
     query_directory = Path(data_dir, title)
     videos_libr_savepath = Path(query_directory, ".".join([title, file_ext]))
+    chatGPT_results_directory = Path(query_directory,"chatGPT_results")
     subtitles_savepath = Path(query_directory,"subtitles")
     videos_dir_savepath = Path(query_directory,"videos")
 
@@ -67,14 +68,15 @@ def main():
     else:
         df_searchRes = pd.read_csv(videos_libr_savepath)
     
-    if save_resultset:
+    if save_resultset and not runFromCSV:
         df_searchRes.to_csv(videos_libr_savepath,  index=False)
         # Save link separately as .txt for easier manual access
         link = df_searchRes['Link']
         with open(Path(query_directory, 'links.txt'), 'w') as f:
             f.write(link.to_string(index=False))
         print(f'Resultset saved in: {videos_libr_savepath}')
-        print(df_searchRes)
+    
+    print(df_searchRes)
     
     if args.video:
         df_searchRes = df_searchRes[df_searchRes['ID'] == args.video]
@@ -84,6 +86,8 @@ def main():
     if query_assessment:
         # Initialize Monte Carlo Sim result table
         mc_analysis = pd.DataFrame(columns=['ID','Title','Length','MC runs','# None','# Wrong Format','# Invalid Citations','Rate "Exercise Found" [%]', 'Rate "Python Dict Returned" [%]', 'Rate "Citation Correct" [%]'])
+    elif not query_assessment:
+        mc_analysis = ''
 
     # Main routine
     for video_ID, video_title, video_length in zip(df_searchRes['ID'], df_searchRes['Title'], df_searchRes['Length']):
@@ -91,10 +95,12 @@ def main():
         # For convenience while programming
         print('https://www.youtube.com/watch?v=' + video_ID)
 
+        # Remove special characters from video title for saving purposes
         video_title = slugify(os.path.splitext(video_title)[0])
 
         # Get each video's raw subtitles from API
         df_sbttls_raw = fetch_subtitles(video_ID)
+        print(df_sbttls_raw)
         if save_subtitles:
             save_raw_subtitles(df_sbttls_raw, video_ID, video_title, subtitles_savepath)
 
@@ -114,11 +120,9 @@ def main():
         except LookupError:
             nltk.download('punkt')
         print(len(nltk.word_tokenize(subtitles)))
-        if len(nltk.word_tokenize(subtitles)) > 3750:
-            print("Warning: Subtitles are longer than 3750 tokens. This might cause problems with the GPT-3 API as additional tokens are needed for the query and 4097 tokens is the limit. Cutting off at 3750 tokens.")
-            print(nltk.word_tokenize(subtitles)[:3750])
-            subtitles = " ".join(elem for elem in nltk.word_tokenize(subtitles)[:3750])
-            print(len(subtitles))
+        if len(nltk.word_tokenize(subtitles)) > 3550:
+            print("Warning: Subtitles are longer than 3550 tokens. This might cause problems with the GPT-3 API as additional tokens are needed for the query and 4097 tokens is the limit. Cutting off at 3550 tokens.")
+            subtitles = " ".join(elem for elem in nltk.word_tokenize(subtitles)[:3550])
         if save_subtitles:
             save_processed_subtitles(subtitles, video_ID, video_title, subtitles_savepath)
 
@@ -126,12 +130,13 @@ def main():
         if query_assessment:
             runs = int(q_ass_sample_size)
             
+        gpt = None
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             futurelist = {executor.submit(askGPT, subtitles, query_assessment, mc_analysis, video_ID): i for i in range(runs)}
             for future in concurrent.futures.as_completed(futurelist):
                 cnt = futurelist[future]
                 try:
-                    data = future.result()
+                    gpt = future.result()
                 except Exception as e:
                     print(f"Try no. {cnt} with video {video_ID} failed.")
                     print(e)
@@ -142,13 +147,21 @@ def main():
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Exercise Found" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# None']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Python Dict Returned" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Citation Correct" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# Invalid Citations']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
-            
-    if save_assessment_results:
-        mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)
-    print(mc_analysis)
-
+            print(mc_analysis)
         
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
+        # Take the last gpt object returned if query_assessment is turned on
+        for exercise in gpt.getResult():
+            for explanations in gpt.getResult()[exercise]:
+                print(explanations)
+
+    if query_assessment and save_assessment_results:
+        mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)
+
+    if not runFromCSV:
+        gpt.saveResult(video_ID, chatGPT_results_directory)
+
+        
 
 def askGPT(subtitles, query_assessment, mc_analysis, video_ID):
     # Ask ChatGPT to identify exercises that are explained in detail
