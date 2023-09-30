@@ -1,6 +1,7 @@
 import openai
 import json
 import urllib.error as urllib2
+import os
 
 class chatGPT(object):
     
@@ -32,24 +33,26 @@ class chatGPT(object):
                 temperature=0
             )
         except urllib2.HTTPError as err:
-            if str(err.code)[:2] == 50: # 500 error family, didn't find a better way to check for 500 errors
+            if str(err.code)[:2] == 50: # 500 error family
                 if try_count > 0:
                     return self.dialogue_step(self=self, persona=persona, user_query=user_query, try_count=try_count-1)
                 else:
                     raise err
 
-        gpt_message = result["choices"][0]["message"]
-        self.message_history.append({"role": gpt_message["role"], "content": gpt_message["content"]})
-        print("GPT: " + gpt_message["content"])
+        gpt_message = result["choices"][0]["message"]#.strip("`Python").strip("`python")
+        self.message_history.append({"role": gpt_message["role"], "content": gpt_message["content"].strip("`Python").strip("`python")})
+        print("GPT: " + gpt_message["content"].strip("`Python").strip("`python"))
         
 
     def getResult(self):
         try:
-            rtn = json.loads(self.message_history[-1]["content"].strip('"').strip("'").strip("python").strip("Python"))
+            rtn = eval(self.message_history[-1]["content"].strip("`Python").strip("`python").replace("\n", ""))
         except:
             rtn = 'no dictionary found'
         return rtn
     
     def saveResult(self, videoID, chatGPT_results_directory):
-        with open(f"/chatGPT_results_directory/{videoID}.json", "w") as outfile:
-            json.dump(self.message_history, outfile, indent=4)
+        if not os.path.exists(chatGPT_results_directory):
+                os.makedirs(chatGPT_results_directory)
+        with open(f"{chatGPT_results_directory}\\{videoID}.json", "w") as outfile:
+            json.dump(self.message_history[-1]["content"].strip("`Python").strip("`python").replace("\n", ""), outfile, indent=4)

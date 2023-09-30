@@ -129,21 +129,24 @@ def main():
         runs = 1
         if query_assessment:
             runs = int(q_ass_sample_size)
-            
-        gpt = None
-        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-            futurelist = {executor.submit(askGPT, subtitles, query_assessment, mc_analysis, video_ID): i for i in range(runs)}
-            for future in concurrent.futures.as_completed(futurelist):
-                cnt = futurelist[future]
-                try:
-                    gpt = future.result()
-                except Exception as e:
-                    print(f"Try no. {cnt} with video {video_ID} failed.")
-                    print(e)
 
-        #print(mc_analysis)
+        if not runFromCSV:
+            gpt = None
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futurelist = {executor.submit(askGPT, subtitles, query_assessment, mc_analysis, video_ID): i for i in range(runs)}
+                for future in concurrent.futures.as_completed(futurelist):
+                    cnt = futurelist[future]
+                    try:
+                        gpt = future.result()
+                    except Exception as e:
+                        print(f"Try no. {cnt} with video {video_ID} failed.")
+                        print(e)
+        if runFromCSV:
+            gpt_result_JSON = eval(json.load(open(Path(chatGPT_results_directory, f'{video_ID}.json'))))
+        else: gpt_result_JSON = gpt.getResult()
+
         # Calculate rates
-        if query_assessment:
+        if query_assessment and not runFromCSV:
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Exercise Found" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# None']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Python Dict Returned" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Citation Correct" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# Invalid Citations']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
@@ -151,16 +154,27 @@ def main():
         
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
         # Take the last gpt object returned if query_assessment is turned on
-        for exercise in gpt.getResult():
-            for explanations in gpt.getResult()[exercise]:
-                print(explanations)
+
+        for exercise in gpt_result_JSON.keys():
+            # More than one citaion
+            if len(gpt_result_JSON[exercise]) > 1:
+                for citation in gpt_result_JSON[exercise]:
+                    print(get_timestamp(citation, df_sbttls_raw))
+            # Exactly one citation
+            elif len(gpt_result_JSON[exercise]) == 1:
+                pass
+                #print(gpt_result_JSON[exercise])
+            for explanations in gpt_result_JSON[exercise]:
+                pass
+                #print(gpt_result_JSON[exercise])
+                
 
     if query_assessment and save_assessment_results:
         mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)
 
+    # Premise that API is called only when wanting to actualize data, otherwise always run from CSV
     if not runFromCSV:
         gpt.saveResult(video_ID, chatGPT_results_directory)
-
         
 
 def askGPT(subtitles, query_assessment, mc_analysis, video_ID):
