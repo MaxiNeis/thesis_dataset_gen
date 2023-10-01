@@ -156,18 +156,18 @@ def main():
         # Take the last gpt object returned if query_assessment is turned on
 
         for exercise in gpt_result_JSON.keys():
-            # More than one citaion
-            if len(gpt_result_JSON[exercise]) > 1:
-                for citation in gpt_result_JSON[exercise]:
-                    print(get_timestamp(citation, df_sbttls_raw))
-            # Exactly one citation
-            elif len(gpt_result_JSON[exercise]) == 1:
-                pass
-                #print(gpt_result_JSON[exercise])
-            for explanations in gpt_result_JSON[exercise]:
-                pass
-                #print(gpt_result_JSON[exercise])
-                
+            # More than one citaion as list
+            if type(gpt_result_JSON[exercise]) == list:
+                if len(gpt_result_JSON[exercise]) > 1:
+                    for citation in gpt_result_JSON[exercise]:
+                        test = get_timestamp(citation.lower(), df_sbttls_raw)
+                # Exactly one citation as list
+                elif len(gpt_result_JSON[exercise]) == 1:
+                    test = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
+            # Exactly one citation as string
+            elif type(gpt_result_JSON[exercise]) == str:
+                test = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
+                    
 
     if query_assessment and save_assessment_results:
         mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)

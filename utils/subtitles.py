@@ -9,6 +9,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from pathlib import Path
 import os
 from slugify import slugify
+from difflib import SequenceMatcher
 
 
 def fetch_subtitles(video_ID: str):
@@ -55,19 +56,24 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
     """
     corpus = raw_subtitles['text'].tolist()
     words_sen = sentence.split(" ")
+    builtup_sentences = []
+    testword_occurances = []
+
     for i, csentence in enumerate(corpus):
         # Get all occurences of the first word of the sentene in the currently inspected subtitle part.
         # For each starting point, everything left of it will be cut. To the right it will be filled up with words to the desired target_length.
         # Finally for each sentence built by this way the similarity to the sentence from ChatGPT will be calculated.
-        words_csen_original = csentence.split(" ")
-        starting_points = [i for i, word in enumerate(words_csen) if word == words_sen[0]]
-        builtup_sentences = []
+        words_csen_original = csentence.lower().split(" ")
+        starting_points = [i for i, word in enumerate(words_csen_original) if word == words_sen[0]]
+        if starting_points:
+            testword_occurances.append(len(starting_points))
         for starting_point in starting_points:
-
-            # Fill csentence with words of next csentence(s) up to the length of csentence + word_offset
+            # Fill csentence with words of next csentence(s) up to the length of len(sentence) + word_offset
             j = i + 1
-            words_csen = words_csen_original
             target_length = len(words_sen) + word_offset
+            # Re-initiate words_csen with original words to allow to use cutoff w/ the next starting point that was calculated with the original lengths
+            words_csen = words_csen_original 
+            words_csen = words_csen[starting_point:] 
             while len(words_csen) < target_length and j < len(corpus):
                 extra_words = corpus[j].split(" ")
                 words_needed = target_length - len(words_csen)
@@ -75,14 +81,19 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
                     extra_words = " ".join(extra_words)
                 elif words_needed < len(extra_words):
                     extra_words = " ".join(extra_words[:words_needed])
-                csentence = csentence + " " + extra_words if extra_words else csentence
+                csentence = " ".join(words_csen) + " " + extra_words if extra_words else " ".join(words_csen)
                 words_csen = csentence.split(" ")
                 j += 1
             builtup_sentences.append(csentence)
             # If first word in csentence
-            if words_sen[0] in csentence:
-                # Compare offset from first word to last word in sentece and corpus. If its the same and the sentence is the same (with very small degree of freedom for mistakes from ChatGPT), return timestamp. 
-                words_csentence = csentence.split(" ")
+    # For each sentence in builtup_sentences calculate similarity to sentence from ChatGPT.
+    # Do this by taking buffer words into account -> from builtup_sentences+len(buffer_words) (as they are in the list) to builtup_sentences-len(buffer_words)
+    # The highest similarity will be the best match
+    for sentence in builtup_sentences:
+        for i in range(2*word_offset):
+            sentence.rsplit(' ', 1)[0]
+
+        
 
 
             # if len(sentence) <= len(csentence):
@@ -110,5 +121,7 @@ def find_highest_similarity(sentence: str, corpus_sentence: str, word_offset: in
     """ 
     pass
 
+def similar(a, b):
+    return SequenceMatcher(None, a, b).ratio()
 
 
