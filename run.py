@@ -163,7 +163,7 @@ def main():
                         test = get_timestamp(citation.lower(), df_sbttls_raw)
                 # Exactly one citation as list
                 elif len(gpt_result_JSON[exercise]) == 1:
-                    test = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
+                    test = get_timestamp(gpt_result_JSON[exercise][0].lower(), df_sbttls_raw)
             # Exactly one citation as string
             elif type(gpt_result_JSON[exercise]) == str:
                 test = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)

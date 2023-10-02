@@ -10,6 +10,7 @@ from pathlib import Path
 import os
 from slugify import slugify
 from difflib import SequenceMatcher
+from operator import itemgetter
 
 
 def fetch_subtitles(video_ID: str):
@@ -56,7 +57,8 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
     """
     corpus = raw_subtitles['text'].tolist()
     words_sen = sentence.split(" ")
-    builtup_sentences = []
+    builtup_sentences = {}
+    bs_count = 0
     testword_occurances = []
 
     for i, csentence in enumerate(corpus):
@@ -66,14 +68,16 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
         words_csen_original = csentence.lower().split(" ")
         starting_points = [i for i, word in enumerate(words_csen_original) if word == words_sen[0]]
         if starting_points:
-            testword_occurances.append(len(starting_points))
+            for i in starting_points:
+                starting_points_derived_timestamps = 100 - (len(words_csen_original)-i) * 100
         for starting_point in starting_points:
             # Fill csentence with words of next csentence(s) up to the length of len(sentence) + word_offset
             j = i + 1
             target_length = len(words_sen) + word_offset
             # Re-initiate words_csen with original words to allow to use cutoff w/ the next starting point that was calculated with the original lengths
-            words_csen = words_csen_original 
-            words_csen = words_csen[starting_point:] 
+            words_csen = words_csen_original
+            # Cut off left of the starting word
+            words_csen = words_csen[starting_point:]
             while len(words_csen) < target_length and j < len(corpus):
                 extra_words = corpus[j].split(" ")
                 words_needed = target_length - len(words_csen)
@@ -84,42 +88,26 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
                 csentence = " ".join(words_csen) + " " + extra_words if extra_words else " ".join(words_csen)
                 words_csen = csentence.split(" ")
                 j += 1
-            builtup_sentences.append(csentence)
+                j2 = j
+                if j2 == len(corpus): # last iteration, next one will be skipped as j < len(corpus) will be false
+                    j2 -= 1 # Decrease by one to be able to use it as index for raw_subtitles
+            # Add each sentence (all its variants that were builtup) to dict as well as their starting point calculated from j which denotes how many next sentences were used
+            builtup_sentences[bs_count] = (csentence, raw_subtitles['start'][i], raw_subtitles['start'][j2]) # (Starting timestamp, Ending timestamp)
+            bs_count += 1
             # If first word in csentence
     # For each sentence in builtup_sentences calculate similarity to sentence from ChatGPT.
     # Do this by taking buffer words into account -> from builtup_sentences+len(buffer_words) (as they are in the list) to builtup_sentences-len(buffer_words)
     # The highest similarity will be the best match
-    for sentence in builtup_sentences:
-        for i in range(2*word_offset):
-            sentence.rsplit(' ', 1)[0]
-
-        
-
-
-            # if len(sentence) <= len(csentence):
-            #     # Make sure to also have last word of sentence in csentence as a rough check
-            #     if words_sen[-1] in words_csentence:
-            #         print(f"Found sentence: {sentence}")
-            #         print(f"Found csentence: {csentence}")
-            #         #return raw_subtitles['start'][i], raw_subtitles['duration'][i]
-            # # Here we need to join sentence from one or more corpus sentences
-            # elif len(sentence) > len(csentence) + word_offset:
-            #     overhang = len(sentence) - len(csentence) + word_offset
-            #     while overhang > 0:
-            #         i += 1
-            #         csentence += corpus[i]
-            #         overhang = len(sentence) - len(csentence)
-
-def find_highest_similarity(sentence: str, corpus_sentence: str, word_offset: int = 5):
-    """
-    IN: - Sentence from ChatGPT.
-        - Corpus sentence suggestion. It is determined by:
-            1. Finding the sarting word of the sentence in the corpus
-            2. Adding len(sentence) + word_offset to the starting word found.
-    Returns: The substring of the corpus sentence suggestion that has the highest similarity to the sentence from ChatGPT.
-             Substring is determined by removing 2*word_offset from the end word by word
-    """ 
-    pass
+    similarities = []
+    for key in builtup_sentences.keys():
+        # Cutting off word by word until len(sentence) - word_offset. For the first sentence no cutoff is done (j == 0)
+        for j in range(2*word_offset):
+            similarities.append((similar(builtup_sentences[key][0].rsplit(' ', j)[0], sentence), key, j))
+    best_score, key, j = max(similarities, key = itemgetter(0))
+    best_sent_raw, best_start, best_end = builtup_sentences[key]
+    best_sent = best_sent_raw.rsplit(' ', j)[0]
+    print(best_sent)
+    print(sentence)
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
