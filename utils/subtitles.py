@@ -55,11 +55,38 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
     """
     Return tuple of start and end timestamp of a sentence
     """
+    builtup_sentences = recommender(sentence, raw_subtitles, word_offset)
+    # If no meaning no starting point was found for any csentence, try again with sentece reduced at the beginning by one word, until len(sentence) == 0
+    while not builtup_sentences:
+        if len(sentence) == 0:
+            print("A citation could not be found.")
+            print("Citation: " + sentence)
+            break
+        sentence = sentence.split(' ', 1)[1]
+        builtup_sentences = recommender(sentence, raw_subtitles, word_offset)
+    # For each sentence in builtup_sentences calculate similarity to sentence from ChatGPT.
+    # Do this by taking buffer words into account -> from builtup_sentences+len(buffer_words) (as they are in the list) to builtup_sentences-len(buffer_words)
+    # The highest similarity will be the best match
+    similarities = []
+    for key in builtup_sentences.keys():
+        # Cutting off word by word until len(sentence) - word_offset. For the first sentence no cutoff is done (j == 0)
+        for j in range(2*word_offset):
+            similarities.append((similar(builtup_sentences[key][0].rsplit(' ', j)[0], sentence), key, j))
+    best_score, key, j = max(similarities, key = itemgetter(0))
+    best_sent_raw, best_start, best_end = builtup_sentences[key]
+    best_sent = best_sent_raw.rsplit(' ', j)[0]
+    #print(best_sent)
+    #print(sentence)
+    return best_start, best_end
+
+def recommender(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int = 5) -> list[str]:
+    """
+    Return a list of recommendations for a sentence. Recommendation: What could fit best to the sentence?
+    """
     corpus = raw_subtitles['text'].tolist()
-    words_sen = sentence.split(" ")
+    words_sen = sentence.lower().split(" ")
     builtup_sentences = {}
     bs_count = 0
-    testword_occurances = []
 
     for i, csentence in enumerate(corpus):
         # Get all occurences of the first word of the sentene in the currently inspected subtitle part.
@@ -67,10 +94,7 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
         # Finally for each sentence built by this way the similarity to the sentence from ChatGPT will be calculated.
         words_csen_original = csentence.lower().split(" ")
         starting_points = [i for i, word in enumerate(words_csen_original) if word == words_sen[0]]
-        if starting_points:
-            for i in starting_points:
-                starting_points_derived_timestamps = 100 - (len(words_csen_original)-i) * 100
-        for starting_point in starting_points:
+        for starting_point in starting_points:          
             # Fill csentence with words of next csentence(s) up to the length of len(sentence) + word_offset
             j = i + 1
             target_length = len(words_sen) + word_offset
@@ -92,22 +116,10 @@ def get_timestamp(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int =
                 if j2 == len(corpus): # last iteration, next one will be skipped as j < len(corpus) will be false
                     j2 -= 1 # Decrease by one to be able to use it as index for raw_subtitles
             # Add each sentence (all its variants that were builtup) to dict as well as their starting point calculated from j which denotes how many next sentences were used
-            builtup_sentences[bs_count] = (csentence, raw_subtitles['start'][i], raw_subtitles['start'][j2]) # (Starting timestamp, Ending timestamp)
+            accurate_start = raw_subtitles['start'][i] + (raw_subtitles['duration'][i] * starting_point/len(words_csen_original)) # More accurate starting-timestamp
+            builtup_sentences[bs_count] = (csentence, accurate_start, raw_subtitles['start'][j2]) # (Starting timestamp, Ending timestamp)
             bs_count += 1
-            # If first word in csentence
-    # For each sentence in builtup_sentences calculate similarity to sentence from ChatGPT.
-    # Do this by taking buffer words into account -> from builtup_sentences+len(buffer_words) (as they are in the list) to builtup_sentences-len(buffer_words)
-    # The highest similarity will be the best match
-    similarities = []
-    for key in builtup_sentences.keys():
-        # Cutting off word by word until len(sentence) - word_offset. For the first sentence no cutoff is done (j == 0)
-        for j in range(2*word_offset):
-            similarities.append((similar(builtup_sentences[key][0].rsplit(' ', j)[0], sentence), key, j))
-    best_score, key, j = max(similarities, key = itemgetter(0))
-    best_sent_raw, best_start, best_end = builtup_sentences[key]
-    best_sent = best_sent_raw.rsplit(' ', j)[0]
-    print(best_sent)
-    print(sentence)
+    return builtup_sentences
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
