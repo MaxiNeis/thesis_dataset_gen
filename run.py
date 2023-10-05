@@ -103,10 +103,6 @@ def main():
         print(df_sbttls_raw)
         if save_subtitles:
             save_raw_subtitles(df_sbttls_raw, video_ID, video_title, subtitles_savepath)
-
-        # Download each video if desired
-        if save_videos == True:
-            download_videos(videos_dir_savepath, video_ID, video_title)
         
         # Add video to MC table if desired
         if query_assessment:
@@ -152,29 +148,45 @@ def main():
             mc_analysis.loc[mc_analysis.ID==video_ID,['Rate "Citation Correct" [%]']] = 100 - (int(mc_analysis.loc[mc_analysis.ID==video_ID,['# Invalid Citations']].values[0][0]) / int(mc_analysis.loc[mc_analysis.ID==video_ID,['MC runs']].values[0][0])) * 100
             print(mc_analysis)
         
+        if query_assessment and save_assessment_results:
+            mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)
+
+        # Premise that API is called only when wanting to actualize data, otherwise always run from CSV
+        if not runFromCSV:
+            gpt.saveResult(video_ID, chatGPT_results_directory)
+
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
         # Take the last gpt object returned if query_assessment is turned on
-
+        timestamps = {}
         for exercise in gpt_result_JSON.keys():
             # More than one citaion as list
             if type(gpt_result_JSON[exercise]) == list:
                 if len(gpt_result_JSON[exercise]) > 1:
                     for citation in gpt_result_JSON[exercise]:
                         best_start, best_end = get_timestamp(citation.lower(), df_sbttls_raw)
+                        if exercise not in timestamps.keys():
+                            timestamps[exercise] = [(best_start, best_end)]
+                        else:
+                            timestamps[exercise].append((best_start, best_end))
+
                 # Exactly one citation as list
                 elif len(gpt_result_JSON[exercise]) == 1:
                     best_start, best_end = get_timestamp(gpt_result_JSON[exercise][0].lower(), df_sbttls_raw)
+                    if exercise not in timestamps.keys():
+                        timestamps[exercise] = [(best_start, best_end)]
+                    else:
+                        timestamps[exercise].append((best_start, best_end))
             # Exactly one citation as string
             elif type(gpt_result_JSON[exercise]) == str:
                 best_start, best_end = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
-                    
-
-    if query_assessment and save_assessment_results:
-        mc_analysis.to_csv(Path(query_directory, 'query_assessment.csv'), index=False)
-
-    # Premise that API is called only when wanting to actualize data, otherwise always run from CSV
-    if not runFromCSV:
-        gpt.saveResult(video_ID, chatGPT_results_directory)
+                if exercise not in timestamps.keys():
+                        timestamps[exercise] = [(best_start, best_end)]
+                else:
+                    timestamps[exercise].append((best_start, best_end))
+        
+        # Download each video if desired.
+        if save_videos == True:
+            download_videos(videos_dir_savepath, video_ID, video_title)
         
 
 def askGPT(subtitles, query_assessment, mc_analysis, video_ID):
