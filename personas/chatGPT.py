@@ -30,7 +30,7 @@ class chatGPT(object):
             result = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=query,
-                temperature=0
+                temperature=0.2
             )
         except urllib2.HTTPError as err:
             if str(err.code)[:2] == 50: # 500 error family
@@ -55,4 +55,4 @@ class chatGPT(object):
         if not os.path.exists(chatGPT_results_directory):
                 os.makedirs(chatGPT_results_directory)
         with open(f"{chatGPT_results_directory}\\{videoID}.json", "w") as outfile:
-            json.dump(self.message_history[-1]["content"].strip("`Python").strip("`python").replace("\n", ""), outfile, indent=4)
+            json.dump(self.message_history[-1]["content"].rfind("}").replace("\n", ""), outfile, indent=4)
