@@ -25,20 +25,21 @@ youtube = googleapiclient.discovery.build(
 videolink_prefix = 'https://www.youtube.com/watch?v='
 
 videoData_template = {
-'Title': 'snippet.title',
 'ID': 'id.videoId',
+'Title': 'snippet.title',
 'Length': None,
 'Link' :  None,
 'isShort': None,
-'Description': 'snippet.description',
+#'Description': 'snippet.description',
 'Published At': 'snippet.publishedAt',
 'Channel Title': 'snippet.channelTitle',
 'Channel ID': 'snippet.channelId',
 'QueryTerm': None,
 'Caption': None,
+'Timestamps': None,
 }
 
-def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'none', lang:str = 'en'):
+def searchVideos(singleVid:str = '', query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'none', lang:str = 'en'):
     """
     Search for videos with the Youtube API
     If relatedVid is specified then query and channel cannot be defined
@@ -57,16 +58,23 @@ def searchVideos(query:str = None, relatedVid:str = None, maxRes:int = 1, channe
         Caption parameter is a serious API functionality limitation for this project.
         This is because you cannot
     """
-    request = youtube.search().list(
-    part = "id,snippet",
-    type = "video",
-    q = query,
-    relatedToVideoId = relatedVid,
-    relevanceLanguage = lang,
-    channelId = channelId,
-    videoCaption = caption,
-    maxResults = maxRes,
-    )
+    if singleVid:
+        request = youtube.videos().list(part="snippet", id=singleVid)
+        videoData_template['ID'] = 'id'
+        #response = request.execute()
+        #test = "hi"
+
+    else:
+        request = youtube.search().list(
+        part = "id,snippet",
+        type = "video",
+        q = query,
+        relatedToVideoId = relatedVid,
+        relevanceLanguage = lang,
+        channelId = channelId,
+        videoCaption = caption,
+        maxResults = maxRes,
+        )
 
     response = request.execute()
     videoList = []
@@ -96,40 +104,45 @@ def get_length(video_url: str):
     yt = YouTube(video_url)
     return timedelta(seconds=yt.length)
 
-def createVideoDF(query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', balancing:str = None, maxResOriginal:int = None, run = 1):
+def createVideoDF(singleVid='', query:str = None, relatedVid:str = None, maxRes:int = 1, channelId:str = None, caption:str = 'any', lang:str = 'en', balancing:str = None, maxResOriginal:int = None, run = 1):
     """
     Get more videos than originally requested to account for videos without subtitles or with wrong format
     """
-    if run == 1:
-        maxResOriginal = maxRes
-    run +=1
-    results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
-    # process resultset, i.e. remove videos that don't fit (= without subtitles and/or wrong format)
-    badResults = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-        futurelist = {executor.submit(fetch_subtitles, videoID): videoID for videoID in results['ID']}
-        for future in concurrent.futures.as_completed(futurelist):
-            videoID = futurelist[future]
-            if future.result() is None:
-                badResults.append(videoID)
-    moreBadResults = check_for_wrong_format(results, balancing)
-    if moreBadResults:
-        remove = list(set(badResults) | set(moreBadResults))
-    else: remove = badResults
-    results = results[~results['ID'].isin(remove)]
+    # No metadata for when video_df gets requested with just one videoID
+    if singleVid:
+        return searchVideos(singleVid=singleVid)
+    else:
+        if run == 1:
+            maxResOriginal = maxRes
+        run +=1
+        results = searchVideos(query = query, relatedVid = relatedVid, maxRes = maxRes, channelId = channelId, caption = caption, lang = lang)
+        # process resultset, i.e. remove videos that don't fit (= without subtitles and/or wrong format)
+        badResults = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            futurelist = {executor.submit(fetch_subtitles, videoID): videoID for videoID in results['ID']}
+            for future in concurrent.futures.as_completed(futurelist):
+                videoID = futurelist[future]
+                if future.result() is None:
+                    badResults.append(videoID)
+        moreBadResults = check_for_wrong_format(results, balancing)
+        if moreBadResults:
+            remove = list(set(badResults) | set(moreBadResults))
+        else: remove = badResults
+        results = results[~results['ID'].isin(remove)]
 
-    if len(results) < maxResOriginal:
-        maxRes += len(remove)
-        results = createVideoDF(query = query,
-                                relatedVid = relatedVid, 
-                                maxRes = maxRes, 
-                                channelId = channelId, 
-                                caption = caption, 
-                                lang = lang, 
-                                balancing = balancing, 
-                                maxResOriginal = maxResOriginal, 
-                                run = run)
-    return results.head(maxResOriginal)
+        if len(results) < maxResOriginal:
+            maxRes += len(remove)
+            results = createVideoDF(singleVid,
+                                    query = query,
+                                    relatedVid = relatedVid, 
+                                    maxRes = maxRes, 
+                                    channelId = channelId, 
+                                    caption = caption, 
+                                    lang = lang, 
+                                    balancing = balancing, 
+                                    maxResOriginal = maxResOriginal, 
+                                    run = run)
+        return results.head(maxResOriginal)
 
 def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
     """

@@ -29,6 +29,7 @@ def main():
     balancing = config['Query']['balancing']
 
     openai.api_key = config['chatGPT']['API']
+    save_timestamps = config['chatGPT'].as_bool('save_timestamps')
 
     save_resultset = config['Library'].as_bool('save_resultset_as_csv')
     save_subtitles = config['Library'].as_bool('save_subtitles')
@@ -48,6 +49,7 @@ def main():
     query_directory = Path(data_dir, title)
     videos_libr_savepath = Path(query_directory, ".".join([title, file_ext]))
     chatGPT_results_directory = Path(query_directory,"chatGPT_results")
+    chatGPT_timestamps_directory = Path(query_directory,"chatGPT_timestamps")
     subtitles_savepath = Path(query_directory,"subtitles")
     videos_dir_savepath = Path(query_directory,"videos")
 
@@ -64,7 +66,7 @@ def main():
     
     # Get video resultset
     if not runFromCSV:
-        df_searchRes = createVideoDF(query=query, maxRes=maxRes, balancing=balancing)
+        df_searchRes = createVideoDF(args.video, query=query, maxRes=maxRes, balancing=balancing)
     else:
         df_searchRes = pd.read_csv(videos_libr_savepath)
     
@@ -95,12 +97,15 @@ def main():
         # For convenience while programming
         print('https://www.youtube.com/watch?v=' + video_ID)
 
+        # GPT Results. One Set of Results per Video with len(Set) = #MCruns
+        gpt_set = []
+
         # Remove special characters from video title for saving purposes
         video_title = slugify(os.path.splitext(video_title)[0])
 
         # Get each video's raw subtitles from API
         df_sbttls_raw = fetch_subtitles(video_ID)
-        print(df_sbttls_raw)
+        #print(df_sbttls_raw)
         if save_subtitles:
             save_raw_subtitles(df_sbttls_raw, video_ID, video_title, subtitles_savepath)
         
@@ -115,7 +120,7 @@ def main():
             nltk.data.find('tokenizers/punkt')
         except LookupError:
             nltk.download('punkt')
-        print(len(nltk.word_tokenize(subtitles)))
+        #print(len(nltk.word_tokenize(subtitles)))
         if len(nltk.word_tokenize(subtitles)) > 3550:
             print("Warning: Subtitles are longer than 3550 tokens. This might cause problems with the GPT-3 API as additional tokens are needed for the query and 4097 tokens is the limit. Cutting off at 3550 tokens.")
             subtitles = " ".join(elem for elem in nltk.word_tokenize(subtitles)[:3550])
@@ -134,9 +139,19 @@ def main():
                     cnt = futurelist[future]
                     try:
                         gpt = future.result()
+                        gpt_set.append(gpt)
+                        print(f"Try no. {cnt} with video {video_ID} finished. GPT's final result: ")
+                        print(gpt.getResult())
                     except Exception as e:
                         print(f"Try no. {cnt} with video {video_ID} failed.")
                         print(e)
+        
+        # Default config: Take the gpt-object with the most identified exercises.
+        max_len = 0
+        for gpt_object in gpt_set:
+            if len(gpt_object.getResult().keys()) > max_len:
+                gpt = gpt_object
+        
         if runFromCSV:
             gpt_result_JSON = eval(json.load(open(Path(chatGPT_results_directory, f'{video_ID}.json'))))
         else: gpt_result_JSON = gpt.getResult()
@@ -157,32 +172,45 @@ def main():
 
         # Backtracking the respective citation from chatGPT in the original subtitles to get the video segment starting-time using tf-idf
         # Take the last gpt object returned if query_assessment is turned on
-        timestamps = {}
-        for exercise in gpt_result_JSON.keys():
-            # More than one citaion as list
-            if type(gpt_result_JSON[exercise]) == list:
-                if len(gpt_result_JSON[exercise]) > 1:
-                    for citation in gpt_result_JSON[exercise]:
-                        best_start, best_end = get_timestamp(citation.lower(), df_sbttls_raw)
+        if save_timestamps:
+            timestamps = {}
+            # No Exercises found in the whole video -> Discard video
+            if not gpt_result_JSON:
+                df_searchRes.drop(df_searchRes[df_searchRes['ID'] == video_ID].index, inplace=True)
+            for exercise in gpt_result_JSON.keys():
+                # More than one citaion as list
+                if type(gpt_result_JSON[exercise]) == list:
+                    if len(gpt_result_JSON[exercise]) > 1:
+                        for citation in gpt_result_JSON[exercise]:
+                            # Multiprocess get_timestamp() for speedup
+                            with concurrent.futures.ProcessPoolExecutor() as executor:
+                                best_start, best_end = get_timestamp(citation.lower(), df_sbttls_raw)
+                                if exercise not in timestamps.keys():
+                                    timestamps[exercise] = [(best_start, best_end)]
+                                else:
+                                    timestamps[exercise].append((best_start, best_end))
+                    # Exactly one citation as list
+                    elif len(gpt_result_JSON[exercise]) == 1:
+                        with concurrent.futures.ProcessPoolExecutor() as executor:
+                            best_start, best_end = get_timestamp(gpt_result_JSON[exercise][0].lower(), df_sbttls_raw)
+                            if exercise not in timestamps.keys():
+                                timestamps[exercise] = [(best_start, best_end)]
+                            else:
+                                timestamps[exercise].append((best_start, best_end))
+                # Exactly one citation as string
+                elif type(gpt_result_JSON[exercise]) == str:
+                    with concurrent.futures.ProcessPoolExecutor() as executor:
+                        best_start, best_end = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
                         if exercise not in timestamps.keys():
-                            timestamps[exercise] = [(best_start, best_end)]
+                                timestamps[exercise] = [(best_start, best_end)]
                         else:
                             timestamps[exercise].append((best_start, best_end))
-
-                # Exactly one citation as list
-                elif len(gpt_result_JSON[exercise]) == 1:
-                    best_start, best_end = get_timestamp(gpt_result_JSON[exercise][0].lower(), df_sbttls_raw)
-                    if exercise not in timestamps.keys():
-                        timestamps[exercise] = [(best_start, best_end)]
-                    else:
-                        timestamps[exercise].append((best_start, best_end))
-            # Exactly one citation as string
-            elif type(gpt_result_JSON[exercise]) == str:
-                best_start, best_end = get_timestamp(gpt_result_JSON[exercise].lower(), df_sbttls_raw)
-                if exercise not in timestamps.keys():
-                        timestamps[exercise] = [(best_start, best_end)]
-                else:
-                    timestamps[exercise].append((best_start, best_end))
+            
+            # Save timestamps per video to later use them for video cutting
+            saveTimestamps(video_ID, chatGPT_timestamps_directory, timestamps)        
+            
+        if save_resultset and not runFromCSV:
+            df_searchRes.to_csv(videos_libr_savepath,  index=False)
         
         # Download each video if desired.
         if save_videos == True:
@@ -214,6 +242,12 @@ def askGPT(subtitles, query_assessment, mc_analysis, video_ID):
             except AttributeError:
                 mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] = mc_analysis.loc[mc_analysis.ID==video_ID,['# Wrong Format']] + 1
     return gpt
+
+def saveTimestamps(videoID, chatGPT_timestamps_directory, timestamps):
+    if not os.path.exists(chatGPT_timestamps_directory):
+        os.makedirs(chatGPT_timestamps_directory)
+    with open(f"{chatGPT_timestamps_directory}\\{videoID}_ts.json", "w") as outfile:
+        json.dump(timestamps, outfile, indent=4)
 
 if __name__ == "__main__":
     main()

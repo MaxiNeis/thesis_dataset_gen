@@ -117,11 +117,9 @@ def recommender(sentence: str, raw_subtitles: pd.DataFrame, word_offset: int = 5
                     j2 -= 1 # Decrease by one to be able to use it as index for raw_subtitles
             # Add each sentence (all its variants that were builtup) to dict as well as their starting point calculated from j which denotes how many next sentences were used
             accurate_start = raw_subtitles['start'][i] + (raw_subtitles['duration'][i] * starting_point/len(words_csen_original)) # More accurate starting-timestamp
-            builtup_sentences[bs_count] = (csentence, accurate_start, raw_subtitles['start'][j2]) # (Starting timestamp, Ending timestamp)
+            builtup_sentences[bs_count] = (csentence, accurate_start, raw_subtitles['start'][j2]) # (Corpus sentence, Starting timestamp, Ending timestamp)
             bs_count += 1
     return builtup_sentences
 
 def similar(a, b):
     return SequenceMatcher(None, a, b).ratio()
-
-
