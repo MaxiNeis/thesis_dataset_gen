@@ -90,7 +90,7 @@ def searchVideos(singleVid:str = '', query:str = None, relatedVid:str = None, ma
         videoData['Link'] = videolink_prefix + videoData['ID']
         # Unfortunately, getting the information of wether a video is a short or not is not a trivial task and too much for this project.
         # Therefore as a workaround we simply decide by taking the video length into account whether a video is a short or not, building on the premise that the effect for the thesis stays the same (compressed visual information).
-        videoData['isShort'] = True if videoData['Length'] < timedelta(minutes=1) else False
+        videoData['isShort'] = "Yes" if videoData['Length'] < timedelta(minutes=1) else "No"
         videoData['Query Term'] = query
         videoData['Caption'] = caption
         videoList.append(videoData)
@@ -153,13 +153,13 @@ def check_for_wrong_format(results: pd.DataFrame, balancing: str = None):
     elif balancing == 'balanced':
         pass
     elif balancing == 'shorts_only':
-        if False in results['isShort'].values:
-            return list(results['ID'][results['isShort'] == False])
+        if "No" in results['isShort'].values:
+            return list(results['ID'][results['isShort'] == "No"])
         else:
             return None
     elif balancing == 'normal_only':
-        if True in results['isShort']:
-            return list(results['ID'][results['isShort'] == True])
+        if "Yes" in results['isShort'].values:
+            return list(results['ID'][results['isShort'] == "Yes"])
         else:
             return None
     else:

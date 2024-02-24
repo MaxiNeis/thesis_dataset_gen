@@ -133,7 +133,7 @@ def main():
 
         if not runFromCSV:
             gpt = None
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 futurelist = {executor.submit(askGPT, subtitles, query_assessment, mc_analysis, video_ID): i for i in range(runs)}
                 for future in concurrent.futures.as_completed(futurelist):
                     cnt = futurelist[future]
@@ -207,7 +207,8 @@ def main():
                             timestamps[exercise].append((best_start, best_end))
             
             # Save timestamps per video to later use them for video cutting
-            saveTimestamps(video_ID, chatGPT_timestamps_directory, timestamps)        
+            saveTimestamps(video_ID, chatGPT_timestamps_directory, timestamps)
+            
             
         if save_resultset and not runFromCSV:
             df_searchRes.to_csv(videos_libr_savepath,  index=False)
